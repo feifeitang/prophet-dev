@@ -1,0 +1,31 @@
+org: joanne
+app: prophet
+service: prophet
+
+frameworkVersion: '3'
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
+    zip: true
+
+provider:
+  name: aws
+  stage: dev
+  region: us-west-2
+  runtime: python3.8
+
+functions:
+  rateHandler:
+    handler: handler.run
+    events:
+      # Invoke Lambda function every 3 days
+      - schedule: rate(3 days)
+
+plugins:
+  - serverless-python-requirements
+
+package:
+  exclude:
+    - node_modules/**
+    - env/**
