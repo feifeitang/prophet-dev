@@ -1,3 +1,6 @@
 .serverless
+env
 *.pyc
 *.pyo
+node_modules
+.requirements.zip
