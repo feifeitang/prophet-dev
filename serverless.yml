@@ -14,10 +14,12 @@ provider:
   stage: dev
   region: us-west-2
   runtime: python3.8
+  timeout: 900
 
 functions:
   rateHandler:
     handler: handler.run
+    timeout: 900
     events:
       # Invoke Lambda function every 3 days
       - schedule: rate(3 days)

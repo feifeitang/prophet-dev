@@ -1,13 +1,15 @@
 try:
-  import unzip_requirements
+    import unzip_requirements
 except ImportError:
-  pass
+    pass
 
+import json
 import boto3
 import datetime
 import logging
+import numpy as np
 import pandas as pd
-# from prophet import Prophet
+from prophet import Prophet
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -51,17 +53,54 @@ def get_metric_data():
         print('get_metric_data error:', str(e))
 
 
+def find_outliers_IQR(df):
+    q1 = df.quantile(0.25)
+    q3 = df.quantile(0.75)
+    IQR = q3-q1
+    outliers = df[((df < (q1-1.5*IQR)) | (df > (q3+1.5*IQR)))]
+    return outliers
+
+
+def mean_absolute_percent_error(y, y_pred):
+    y, y_pred = np.array(y), np.array(y_pred)
+    return np.mean(np.abs((y - y_pred) / y)) * 100
+
+
 def run(event, context):
     current_time = datetime.datetime.now().time()
     name = context.function_name
-    logger.info("Your cron function " + name + " ran at " + str(current_time))
 
+    body = {
+        'message': 'Your cron function ' + name + ' ran at ' + str(current_time),
+        'input': event
+    }
+
+    # load the data
     timestamps = get_metric_data()['MetricDataResults'][0]['Timestamps']
     values = get_metric_data()['MetricDataResults'][0]['Values']
-
     data = {
         'timestamps': timestamps,
         'values': values
     }
     df = pd.DataFrame(data)
+
+    # find outliers
+    outliers = find_outliers_IQR(df['values'])
+    print('number of outliers: ' + str(len(outliers)))
+    print('max outlier value: ' + str(outliers.max()))
+    print('min outlier value: ' + str(outliers.min()))
+
+    # data preprocessing
+    data = {
+        'ds': df['timestamps'].values,
+        'y': df['values'].values
+    }
+    df = pd.DataFrame(data)
     print(df)
+
+    response = {
+        'statusCode': 200,
+        'body': json.dumps(body)
+    }
+
+    return response
