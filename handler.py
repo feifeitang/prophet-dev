@@ -87,6 +87,8 @@ def run(event, context):
     # find outliers
     outliers = find_outliers_IQR(df['values'])
     print('number of outliers: ' + str(len(outliers)))
+    print('percentage of extreme observations: ' +
+          str(round(len(outliers)/len(df)*100, 4)) + '%')
     print('max outlier value: ' + str(outliers.max()))
     print('min outlier value: ' + str(outliers.min()))
 
@@ -96,7 +98,13 @@ def run(event, context):
         'y': df['values'].values
     }
     df = pd.DataFrame(data)
-    print(df)
+
+    # model fitting
+    # m = Prophet()
+    # m.fit(df)
+    # future = m.make_future_dataframe(periods=2016, freq="5min")
+    # forecast = m.predict(future)
+    # print(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
 
     response = {
         'statusCode': 200,
