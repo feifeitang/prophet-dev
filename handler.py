@@ -12,7 +12,6 @@ try:
 except Exception as e:
     print('set permission error:', str(e))
 
-
 import json
 import boto3
 import datetime
@@ -20,6 +19,7 @@ import logging
 import numpy as np
 import pandas as pd
 from prophet import Prophet
+from prophet.diagnostics import cross_validation
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -115,6 +115,13 @@ def run(event, context):
     future = m.make_future_dataframe(periods=2016, freq="5min")
     forecast = m.predict(future)
     print(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+
+    # cross validation
+    df_cv = cross_validation(
+        m, initial='8 days', period='1 days', horizon='2 days')
+    mape = mean_absolute_percent_error(df_cv['y'], df_cv['yhat'])
+    print('mape', mape)
+    print('acc', 100-mape)
 
     response = {
         'statusCode': 200,
