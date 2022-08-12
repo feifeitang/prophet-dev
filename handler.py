@@ -3,6 +3,16 @@ try:
 except ImportError:
     pass
 
+import os
+try:
+    os.chmod("/tmp/sls-py-req/prophet/stan_model/prophet_model.bin", 0o777)
+    print('----------------')
+    print('set permission succ')
+    print('----------------')
+except Exception as e:
+    print('set permission error:', str(e))
+
+
 import json
 import boto3
 import datetime
@@ -100,11 +110,11 @@ def run(event, context):
     df = pd.DataFrame(data)
 
     # model fitting
-    # m = Prophet()
-    # m.fit(df)
-    # future = m.make_future_dataframe(periods=2016, freq="5min")
-    # forecast = m.predict(future)
-    # print(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+    m = Prophet()
+    m.fit(df)
+    future = m.make_future_dataframe(periods=2016, freq="5min")
+    forecast = m.predict(future)
+    print(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
 
     response = {
         'statusCode': 200,
