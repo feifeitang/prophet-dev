@@ -47,20 +47,26 @@ def query_influxdb():
         |> filter(fn:(r) => r._measurement == "ras")\
         |> filter(fn:(r) => r.client_country == "US")\
         |> filter(fn:(r) => r.pid == "TMCHECKM")\
+        |> filter(fn:(r) => r._field == "check_telephone")\
         |> aggregateWindow(every: 1h, fn: count)\
         |> yield() '
 
         result = query_api.query(org=org, query=query)
 
-        results = []
+        times = []
+        values = []
         for table in result:
             for record in table.records:
-                results.append((record.get_field(), record.get_value()))
+                times.append((record.get_time()))
+                values.append((record.get_value()))
 
-        print(results)
+        return {
+            'times': times,
+            'values': values
+        }
 
     except Exception as e:
-        print('queryInfluxCloud error:', str(e))
+        print('query_influxdb error:', str(e))
 
 
 def find_outliers(df):
@@ -78,15 +84,6 @@ def calculate_mape(y, y_pred):
 
 def prophet_forecast():
     try:
-        # load the data
-        timestamps = get_metric_data()['MetricDataResults'][0]['Timestamps']
-        values = get_metric_data()['MetricDataResults'][0]['Values']
-        data = {
-            'timestamps': timestamps,
-            'values': values
-        }
-        df = pd.DataFrame(data)
-
         # find outliers
         outliers = find_outliers(df['values'])
         print('number of outliers: ' + str(len(outliers)))
@@ -146,7 +143,16 @@ def run(event, context):
         'input': event
     }
 
-    query_influxdb()
+    # load the data
+    query_influxdb_res = query_influxdb()
+    times = query_influxdb_res['times']
+    values = query_influxdb_res['values']
+    data = {
+        'timestamps': times,
+        'values': values
+    }
+    df = pd.DataFrame(data)
+    print(df)
 
     response = {
         'statusCode': 200,
