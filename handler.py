@@ -26,18 +26,18 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-bucket = 'fb-production-metric'
-org = 'a83f3349e41bdab9'
-token = '3zdSyqF8QcIFM0PHymCYDltYFZq1lg5JI6AgtMtGfk6AF7i9krWnvdIDWaUnLhbDUWJwZiGme40c5JURo8zduw=='
-url = 'https://us-west-2-2.aws.cloud2.influxdata.com/'
+BUCKET = 'fb-production-metric'
+ORG = 'a83f3349e41bdab9'
+TOKEN = '3zdSyqF8QcIFM0PHymCYDltYFZq1lg5JI6AgtMtGfk6AF7i9krWnvdIDWaUnLhbDUWJwZiGme40c5JURo8zduw=='
+URL = 'https://us-west-2-2.aws.cloud2.influxdata.com/'
 
 
 def query_influxdb():
     try:
         client = influxdb_client.InfluxDBClient(
-            url=url,
-            token=token,
-            org=org
+            url=URL,
+            token=TOKEN,
+            org=ORG
         )
 
         query_api = client.query_api()
@@ -51,7 +51,7 @@ def query_influxdb():
         |> aggregateWindow(every: 1h, fn: count)\
         |> yield() '
 
-        result = query_api.query(org=org, query=query)
+        result = query_api.query(org=ORG, query=query)
 
         times = []
         values = []
@@ -82,53 +82,108 @@ def calculate_mape(y, y_pred):
     return np.mean(np.abs((y - y_pred) / y)) * 100
 
 
-def prophet_forecast():
+def prophet_forecast(df):
     try:
-        # find outliers
-        outliers = find_outliers(df['values'])
-        print('number of outliers: ' + str(len(outliers)))
-        print('percentage of extreme observations: ' +
-              str(round(len(outliers)/len(df)*100, 4)) + '%')
-        print('max outlier value: ' + str(outliers.max()))
-        print('min outlier value: ' + str(outliers.min()))
-
-        # data preprocessing
-        data = {
-            'ds': df['timestamps'].values,
-            'y': df['values'].values
-        }
-        df = pd.DataFrame(data)
-
         # model fitting
         m = Prophet()
         m.fit(df)
-        future = m.make_future_dataframe(periods=2016, freq='5min')
+        future = m.make_future_dataframe(periods=24, freq='1h')
         forecast = m.predict(future)
-        print(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+        print('----- forecast dataframe start -----')
+        print(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']])
+        print('----- forecast dataframe end -----')
 
         # cross validation
         df_cv = cross_validation(
-            m, initial='8 days', period='1 days', horizon='2 days')
+            m, initial='3 days', period='1 days', horizon='2 days')
         mape = calculate_mape(df_cv['y'], df_cv['yhat'])
         print('mape', mape)
         print('acc', 100-mape)
+
+        return forecast
 
     except Exception as e:
         print('prophet_forecast error:', str(e))
 
 
-def write_influxdb(points):
+def create_write_influxdb_data(df, forecast):
+    df_concat = pd.concat([df[['ds', 'y']], forecast[['yhat', 'yhat_lower', 'yhat_upper']]], axis = 1)
+
+    ds = df_concat.ds.values
+
+    # y
+    values = df_concat.head(len(df)).y.values
+    variables = ['y'] * len(values)
+    data = {
+        'ds': df_concat.head(len(df)).ds.values,
+        'check_telephone_count': values,
+        'variable': variables
+    }
+    y_df = pd.DataFrame(data)
+    y_df.set_index('ds', inplace=True)
+
+    # yhat
+    values = df_concat.yhat.values
+    variables = ['yhat'] * len(values)
+    data = {
+        'ds': ds,
+        'check_telephone_count': values,
+        'variable': variables
+    }
+    yhat_df = pd.DataFrame(data)
+    yhat_df.set_index('ds', inplace=True)
+
+    # yhat_lower
+    values = df_concat.yhat_lower.values
+    variables = ['yhat_lower'] * len(values)
+    data = {
+        'ds': ds,
+        'check_telephone_count': values,
+        'variable': variables
+    }
+    yhat_lower_df = pd.DataFrame(data)
+    yhat_lower_df.set_index('ds', inplace=True)
+
+    # yhat_upper
+    values = df_concat.yhat_upper.values
+    variables = ['yhat_upper'] * len(values)
+    data = {
+        'ds': ds,
+        'check_telephone_count': values,
+        'variable': variables
+    }
+    yhat_upper_df = pd.DataFrame(data)
+    yhat_upper_df.set_index('ds', inplace=True)
+
+    return {
+        'y': y_df,
+        'yhat': yhat_df,
+        'yhat_lower': yhat_lower_df,
+        'yhat_upper': yhat_upper_df
+    }
+
+
+def write_influxdb(data):
     try:
         client = influxdb_client.InfluxDBClient(
-            url=url,
-            token=token,
-            org=org
+            url=URL,
+            token=TOKEN,
+            org=ORG
         )
 
         write_api = client.write_api(write_options=SYNCHRONOUS)
 
-        # points = influxdb_client.Point("my_measurement").tag("location", "Prague").field("temperature", 25.3)
-        write_api.write(bucket=bucket, org=org, record=points)
+        y_df = data['y']
+        yhat_df = data['yhat']
+        yhat_lower_df = data['yhat_lower']
+        yhat_upper_df = data['yhat_upper']
+
+        write_api.write(bucket=BUCKET, org=ORG, record=y_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        write_api.write(bucket=BUCKET, org=ORG, record=yhat_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        write_api.write(bucket=BUCKET, org=ORG, record=yhat_lower_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        write_api.write(bucket=BUCKET, org=ORG, record=yhat_upper_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+
+        client.close()
 
     except Exception as e:
         print('write_influxdb error:', str(e))
@@ -148,11 +203,34 @@ def run(event, context):
     times = query_influxdb_res['times']
     values = query_influxdb_res['values']
     data = {
-        'timestamps': times,
+        'times': times,
         'values': values
     }
     df = pd.DataFrame(data)
     print(df)
+
+    # find outliers
+    outliers = find_outliers(df['values'])
+    print('number of outliers: ' + str(len(outliers)))
+    print('percentage of extreme observations: ' +
+          str(round(len(outliers)/len(df)*100, 4)) + '%')
+    print('max outlier value: ' + str(outliers.max()))
+    print('min outlier value: ' + str(outliers.min()))
+
+    # data preprocessing
+    data = {
+        'ds': df['times'].values,
+        'y': df['values'].values
+    }
+    df = pd.DataFrame(data)
+
+    print('---------- prophet forecast start ----------')
+    forecast = prophet_forecast(df)
+    print('---------- prophet forecast end ----------')
+
+    data = create_write_influxdb_data(df, forecast)
+    
+    write_influxdb(data)
 
     response = {
         'statusCode': 200,
