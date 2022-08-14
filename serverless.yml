@@ -8,6 +8,8 @@ custom:
   pythonRequirements:
     dockerizePip: true
     zip: true
+    useDownloadCache: true
+    useStaticCache: true
 
 provider:
   name: aws
@@ -28,6 +30,7 @@ plugins:
   - serverless-python-requirements
 
 package:
-  exclude:
-    - node_modules/**
-    - env/**
+  excludeDevDependencies: false
+  patterns:
+    - '!node_modules/**'
+    - '!env/**'

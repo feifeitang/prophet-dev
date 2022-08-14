@@ -43,7 +43,7 @@ def query_influxdb():
         query_api = client.query_api()
 
         query = ' from(bucket:"fb-production-metric")\
-        |> range(start: -28d)\
+        |> range(start: -7d)\
         |> filter(fn:(r) => r._measurement == "ras")\
         |> filter(fn:(r) => r.client_country == "US")\
         |> filter(fn:(r) => r.pid == "TMCHECKM")\
@@ -107,9 +107,14 @@ def prophet_forecast(df):
 
 
 def create_write_influxdb_data(df, forecast):
-    df_concat = pd.concat([df[['ds', 'y']], forecast[['yhat', 'yhat_lower', 'yhat_upper']]], axis = 1)
+    df_concat = pd.concat(
+        [df[['y']], forecast[['yhat', 'yhat_lower', 'yhat_upper', 'ds']]], axis=1)
 
     ds = df_concat.ds.values
+    print('-----create_write_influxdb_data------')
+    print('ds', ds)
+    print('ds len: ', len(ds))
+    print('-----create_write_influxdb_data------')
 
     # y
     values = df_concat.head(len(df)).y.values
@@ -174,16 +179,27 @@ def write_influxdb(data):
         write_api = client.write_api(write_options=SYNCHRONOUS)
 
         y_df = data['y']
+        print('y_df.head()', y_df)
+
         yhat_df = data['yhat']
+        print('yhat_df.head()', yhat_df)
+
         yhat_lower_df = data['yhat_lower']
+        print('yhat_lower_df.head()', yhat_lower_df)
+
         yhat_upper_df = data['yhat_upper']
+        print('yhat_upper_df.head()', yhat_upper_df)
 
-        write_api.write(bucket=BUCKET, org=ORG, record=y_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
-        write_api.write(bucket=BUCKET, org=ORG, record=yhat_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
-        write_api.write(bucket=BUCKET, org=ORG, record=yhat_lower_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
-        write_api.write(bucket=BUCKET, org=ORG, record=yhat_upper_df, data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        write_api.write(bucket=BUCKET, org=ORG, record=y_df,
+                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        write_api.write(bucket=BUCKET, org=ORG, record=yhat_df,
+                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        write_api.write(bucket=BUCKET, org=ORG, record=yhat_lower_df,
+                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        write_api.write(bucket=BUCKET, org=ORG, record=yhat_upper_df,
+                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
 
-        client.close()
+        write_api.close()
 
     except Exception as e:
         print('write_influxdb error:', str(e))
@@ -229,7 +245,7 @@ def run(event, context):
     print('---------- prophet forecast end ----------')
 
     data = create_write_influxdb_data(df, forecast)
-    
+
     write_influxdb(data)
 
     response = {

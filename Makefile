@@ -13,3 +13,6 @@ sls-deploy:
 .PHONY: sls-invoke
 sls-invoke:
 	@sls invoke -f rateHandler
+
+.PHONY: sls-deploy-invoke
+sls-deploy-invoke: sls-deploy sls-invoke
