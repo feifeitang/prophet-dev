@@ -31,15 +31,15 @@ ORG = 'a83f3349e41bdab9'
 TOKEN = '3zdSyqF8QcIFM0PHymCYDltYFZq1lg5JI6AgtMtGfk6AF7i9krWnvdIDWaUnLhbDUWJwZiGme40c5JURo8zduw=='
 URL = 'https://us-west-2-2.aws.cloud2.influxdata.com/'
 
+client = influxdb_client.InfluxDBClient(
+    url=URL,
+    token=TOKEN,
+    org=ORG
+)
+
 
 def query_influxdb():
     try:
-        client = influxdb_client.InfluxDBClient(
-            url=URL,
-            token=TOKEN,
-            org=ORG
-        )
-
         query_api = client.query_api()
 
         query = ' from(bucket:"fb-production-metric")\
@@ -106,29 +106,25 @@ def prophet_forecast(df):
         print('prophet_forecast error:', str(e))
 
 
-def create_write_influxdb_data(df, forecast):
-    df_concat = pd.concat(
-        [df[['y']], forecast[['yhat', 'yhat_lower', 'yhat_upper', 'ds']]], axis=1)
+def create_write_influxdb_data(forecast):
+    # df_concat = pd.concat(
+    #     [df[['y']], forecast[['yhat', 'yhat_lower', 'yhat_upper', 'ds']]], axis=1)
 
-    ds = df_concat.ds.values
-    print('-----create_write_influxdb_data------')
-    print('ds', ds)
-    print('ds len: ', len(ds))
-    print('-----create_write_influxdb_data------')
+    ds = forecast.ds.values
 
-    # y
-    values = df_concat.head(len(df)).y.values
-    variables = ['y'] * len(values)
-    data = {
-        'ds': df_concat.head(len(df)).ds.values,
-        'check_telephone_count': values,
-        'variable': variables
-    }
-    y_df = pd.DataFrame(data)
-    y_df.set_index('ds', inplace=True)
+    # # y
+    # values = df_concat.head(len(df)).y.values
+    # variables = ['y'] * len(values)
+    # data = {
+    #     'ds': df_concat.head(len(df)).ds.values,
+    #     'check_telephone_count': values,
+    #     'variable': variables
+    # }
+    # y_df = pd.DataFrame(data)
+    # y_df.set_index('ds', inplace=True)
 
     # yhat
-    values = df_concat.yhat.values
+    values = forecast.yhat.values
     variables = ['yhat'] * len(values)
     data = {
         'ds': ds,
@@ -139,7 +135,7 @@ def create_write_influxdb_data(df, forecast):
     yhat_df.set_index('ds', inplace=True)
 
     # yhat_lower
-    values = df_concat.yhat_lower.values
+    values = forecast.yhat_lower.values
     variables = ['yhat_lower'] * len(values)
     data = {
         'ds': ds,
@@ -150,7 +146,7 @@ def create_write_influxdb_data(df, forecast):
     yhat_lower_df.set_index('ds', inplace=True)
 
     # yhat_upper
-    values = df_concat.yhat_upper.values
+    values = forecast.yhat_upper.values
     variables = ['yhat_upper'] * len(values)
     data = {
         'ds': ds,
@@ -161,7 +157,7 @@ def create_write_influxdb_data(df, forecast):
     yhat_upper_df.set_index('ds', inplace=True)
 
     return {
-        'y': y_df,
+        # 'y': y_df,
         'yhat': yhat_df,
         'yhat_lower': yhat_lower_df,
         'yhat_upper': yhat_upper_df
@@ -170,16 +166,10 @@ def create_write_influxdb_data(df, forecast):
 
 def write_influxdb(data):
     try:
-        client = influxdb_client.InfluxDBClient(
-            url=URL,
-            token=TOKEN,
-            org=ORG
-        )
-
         write_api = client.write_api(write_options=SYNCHRONOUS)
 
-        y_df = data['y']
-        print('y_df.head()', y_df)
+        # y_df = data['y']
+        # print('y_df.head()', y_df)
 
         yhat_df = data['yhat']
         print('yhat_df.head()', yhat_df)
@@ -190,8 +180,8 @@ def write_influxdb(data):
         yhat_upper_df = data['yhat_upper']
         print('yhat_upper_df.head()', yhat_upper_df)
 
-        write_api.write(bucket=BUCKET, org=ORG, record=y_df,
-                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+        # write_api.write(bucket=BUCKET, org=ORG, record=y_df,
+        #                 data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
         write_api.write(bucket=BUCKET, org=ORG, record=yhat_df,
                         data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
         write_api.write(bucket=BUCKET, org=ORG, record=yhat_lower_df,
@@ -292,3 +282,6 @@ def get_metric_data():
 
     except Exception as e:
         print('get_metric_data error:', str(e))
+
+
+client.close()
