@@ -40,8 +40,6 @@ client = influxdb_client.InfluxDBClient(
 
 def delete_data():
     try:
-        print('start delete_data')
-
         delete_api = client.delete_api()
 
         start = datetime.datetime.now()
@@ -244,6 +242,8 @@ def run(event, context):
         'body': json.dumps(body)
     }
 
+    client.close()
+
     return response
 
 
@@ -278,8 +278,6 @@ def get_metric_data():
             ScanBy='TimestampAscending',
             LabelOptions={'Timezone': '+0800'},
         )
-
-        client.close()
 
         return response
 
