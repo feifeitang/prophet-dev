@@ -38,6 +38,23 @@ client = influxdb_client.InfluxDBClient(
 )
 
 
+def delete_data():
+    try:
+        print('start delete_data')
+
+        delete_api = client.delete_api()
+
+        start = datetime.datetime.now()
+        print('start time', start)
+        stop = datetime.datetime.now()+datetime.timedelta(5)
+        print('stop time', stop)
+        delete_api.delete(
+            start, stop, '_measurement="ras-prophet-forecast"', bucket=BUCKET)
+
+    except Exception as e:
+        print('delete_data error:', str(e))
+
+
 def query_influxdb():
     try:
         query_api = client.query_api()
@@ -107,21 +124,7 @@ def prophet_forecast(df):
 
 
 def create_write_influxdb_data(forecast):
-    # df_concat = pd.concat(
-    #     [df[['y']], forecast[['yhat', 'yhat_lower', 'yhat_upper', 'ds']]], axis=1)
-
     ds = forecast.ds.values
-
-    # # y
-    # values = df_concat.head(len(df)).y.values
-    # variables = ['y'] * len(values)
-    # data = {
-    #     'ds': df_concat.head(len(df)).ds.values,
-    #     'check_telephone_count': values,
-    #     'variable': variables
-    # }
-    # y_df = pd.DataFrame(data)
-    # y_df.set_index('ds', inplace=True)
 
     # yhat
     values = forecast.yhat.values
@@ -168,9 +171,6 @@ def write_influxdb(data):
     try:
         write_api = client.write_api(write_options=SYNCHRONOUS)
 
-        # y_df = data['y']
-        # print('y_df.head()', y_df)
-
         yhat_df = data['yhat']
         print('yhat_df.head()', yhat_df)
 
@@ -180,8 +180,6 @@ def write_influxdb(data):
         yhat_upper_df = data['yhat_upper']
         print('yhat_upper_df.head()', yhat_upper_df)
 
-        # write_api.write(bucket=BUCKET, org=ORG, record=y_df,
-        #                 data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
         write_api.write(bucket=BUCKET, org=ORG, record=yhat_df,
                         data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
         write_api.write(bucket=BUCKET, org=ORG, record=yhat_lower_df,
@@ -203,6 +201,9 @@ def run(event, context):
         'message': 'Your cron function ' + name + ' ran at ' + str(current_time),
         'input': event
     }
+
+    # delete future data before forecast again
+    delete_data()
 
     # load the data
     query_influxdb_res = query_influxdb()
@@ -234,7 +235,7 @@ def run(event, context):
     forecast = prophet_forecast(df)
     print('---------- prophet forecast end ----------')
 
-    data = create_write_influxdb_data(df, forecast)
+    data = create_write_influxdb_data(forecast)
 
     write_influxdb(data)
 
@@ -278,10 +279,9 @@ def get_metric_data():
             LabelOptions={'Timezone': '+0800'},
         )
 
+        client.close()
+
         return response
 
     except Exception as e:
         print('get_metric_data error:', str(e))
-
-
-client.close()
