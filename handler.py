@@ -53,21 +53,27 @@ def delete_data():
         print('delete_data error:', str(e))
 
 
-def query_influxdb():
+def create_query(measurement, tagKey, tagValue):
+    try:
+        query = ' from(bucket:"{}")\
+        |> range(start: -8d)\
+        |> filter(fn: (r) => r._measurement == "{}" and r.{} == "{}")\
+        |> group(columns: ["{}"])\
+        |> aggregateWindow(every: 1h, fn: count)\
+        |> yield() '.format(BUCKET, measurement, tagKey, tagValue, tagKey)
+
+        return query
+
+    except Exception as e:
+        print('create_query error:', str(e))
+
+
+def query_influxdb(query):
     try:
         query_api = client.query_api()
-
-        query = ' from(bucket:"fb-production-metric")\
-        |> range(start: -7d)\
-        |> filter(fn:(r) => r._measurement == "ras")\
-        |> filter(fn:(r) => r.client_country == "US")\
-        |> filter(fn:(r) => r.pid == "TMCHECKM")\
-        |> filter(fn:(r) => r._field == "check_telephone")\
-        |> aggregateWindow(every: 1h, fn: count)\
-        |> yield() '
-
+        
         result = query_api.query(org=ORG, query=query)
-
+        
         times = []
         values = []
         for table in result:
@@ -203,8 +209,10 @@ def run(event, context):
     # delete future data before forecast again
     delete_data()
 
+    query = create_query('ras', 'pid', 'ITMCHECKM')
+
     # load the data
-    query_influxdb_res = query_influxdb()
+    query_influxdb_res = query_influxdb(query)
     times = query_influxdb_res['times']
     values = query_influxdb_res['values']
     data = {
