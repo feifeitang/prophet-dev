@@ -18,6 +18,7 @@ import datetime
 import logging
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import ParameterGrid
 from prophet import Prophet
 from prophet.diagnostics import cross_validation
 import influxdb_client
@@ -53,14 +54,14 @@ def delete_data():
         print('delete_data error:', str(e))
 
 
-def create_query(measurement, tagKey, tagValue):
+def create_query(measurement, tagKey, tagValue, interval):
     try:
         query = ' from(bucket:"{}")\
-        |> range(start: -8d)\
+        |> range(start: -10d)\
         |> filter(fn: (r) => r._measurement == "{}" and r.{} == "{}")\
         |> group(columns: ["{}"])\
-        |> aggregateWindow(every: 1h, fn: count)\
-        |> yield() '.format(BUCKET, measurement, tagKey, tagValue, tagKey)
+        |> aggregateWindow(every: {}, fn: count)\
+        |> yield() '.format(BUCKET, measurement, tagKey, tagValue, tagKey, interval)
 
         return query
 
@@ -71,9 +72,9 @@ def create_query(measurement, tagKey, tagValue):
 def query_influxdb(query):
     try:
         query_api = client.query_api()
-        
+
         result = query_api.query(org=ORG, query=query)
-        
+
         times = []
         values = []
         for table in result:
@@ -105,10 +106,44 @@ def calculate_mape(y, y_pred):
 
 def prophet_forecast(df):
     try:
+        # Tune changepoint
+        params_grid = {
+            'n_changepoints': [20, 25, 30],  # default 25
+            'changepoint_range': [7, 8, 9],  # default 0.8
+            'changepoint_prior_scale': [0.5, 0.05],  # default 0.05
+        }
+        grid = ParameterGrid(params_grid)
+        cnt = 0
+        for p in grid:
+            cnt = cnt+1
+        print('Total Possible Models', cnt)
+
+        val = pd.DataFrame(columns = ['Acc', 'MAPE', 'Parameters'])
+
+        for p in grid:
+            print(p)
+
+            m = Prophet(
+                n_changepoints = p['n_changepoints'],
+                changepoint_range = p['changepoint_range'] / 10,
+                changepoint_prior_scale = p['changepoint_prior_scale'],
+            )
+            m.fit(df)
+
+            future = m.make_future_dataframe(periods=72, freq="1h")
+            forecast = m.predict(future)
+            forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail()
+
+            df_cv = cross_validation(m, initial='7 days', period='1.5 days', horizon = '3 days')
+
+            mape = calculate_mape(df_cv['y'], df_cv['yhat'])
+            acc = 100-mape
+            val = val.append({'Acc':acc, 'MAPE':mape, 'Parameters':p}, ignore_index=True)
+
         # model fitting
-        m = Prophet()
+        m = Prophet(interval_width=0.95)
         m.fit(df)
-        future = m.make_future_dataframe(periods=24, freq='1h')
+        future = m.make_future_dataframe(periods=72, freq='1h')
         forecast = m.predict(future)
         print('----- forecast dataframe start -----')
         print(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']])
@@ -127,69 +162,71 @@ def prophet_forecast(df):
         print('prophet_forecast error:', str(e))
 
 
-def create_write_influxdb_data(forecast):
+def create_write_influxdb_data(forecast, tagKey, tagValue, interval):
     ds = forecast.ds.values
 
     # yhat
     values = forecast.yhat.values
-    variables = ['yhat'] * len(values)
     data = {
         'ds': ds,
-        'check_telephone_count': values,
-        'variable': variables
+        'count': values,
+        'variable': ['yhat'] * len(values),
+        tagKey: [tagValue] * len(values),
+        'interval': [interval] * len(values)
     }
     yhat_df = pd.DataFrame(data)
     yhat_df.set_index('ds', inplace=True)
 
     # yhat_lower
     values = forecast.yhat_lower.values
-    variables = ['yhat_lower'] * len(values)
     data = {
         'ds': ds,
-        'check_telephone_count': values,
-        'variable': variables
+        'count': values,
+        'variable': ['yhat_lower'] * len(values),
+        tagKey: [tagValue] * len(values),
+        'interval': [interval] * len(values)
     }
     yhat_lower_df = pd.DataFrame(data)
     yhat_lower_df.set_index('ds', inplace=True)
 
     # yhat_upper
     values = forecast.yhat_upper.values
-    variables = ['yhat_upper'] * len(values)
     data = {
         'ds': ds,
-        'check_telephone_count': values,
-        'variable': variables
+        'count': values,
+        'variable': ['yhat_upper'] * len(values),
+        tagKey: [tagValue] * len(values),
+        'interval': [interval] * len(values)
     }
     yhat_upper_df = pd.DataFrame(data)
     yhat_upper_df.set_index('ds', inplace=True)
 
     return {
-        # 'y': y_df,
         'yhat': yhat_df,
         'yhat_lower': yhat_lower_df,
         'yhat_upper': yhat_upper_df
     }
 
 
-def write_influxdb(data):
+def write_influxdb(data, measurement, tagKey):
     try:
         write_api = client.write_api(write_options=SYNCHRONOUS)
 
         yhat_df = data['yhat']
-        print('yhat_df.head()', yhat_df)
+        print('yhat_df', yhat_df)
 
         yhat_lower_df = data['yhat_lower']
-        print('yhat_lower_df.head()', yhat_lower_df)
+        print('yhat_lower_df', yhat_lower_df)
 
         yhat_upper_df = data['yhat_upper']
-        print('yhat_upper_df.head()', yhat_upper_df)
+        print('yhat_upper_df', yhat_upper_df)
 
         write_api.write(bucket=BUCKET, org=ORG, record=yhat_df,
-                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+                        data_frame_measurement_name=measurement+'-prophet-forecast', data_frame_tag_columns=['variable', tagKey, 'interval'])
         write_api.write(bucket=BUCKET, org=ORG, record=yhat_lower_df,
-                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+                        data_frame_measurement_name=measurement+'-prophet-forecast', data_frame_tag_columns=['variable', tagKey, 'interval'])
         write_api.write(bucket=BUCKET, org=ORG, record=yhat_upper_df,
-                        data_frame_measurement_name='ras-prophet-forecast', data_frame_tag_columns=['variable'])
+                        data_frame_measurement_name=measurement+'-prophet-forecast', data_frame_tag_columns=['variable', tagKey, 'interval'])
 
         write_api.close()
 
@@ -198,6 +235,9 @@ def write_influxdb(data):
 
 
 def run(event, context):
+    print('event:', event)
+    print('context:', context)
+
     current_time = datetime.datetime.now().time()
     name = context.function_name
 
@@ -209,7 +249,7 @@ def run(event, context):
     # delete future data before forecast again
     delete_data()
 
-    query = create_query('ras', 'pid', 'ITMCHECKM')
+    query = create_query('ras', 'pid', 'TMCHECKM', '1h')
 
     # load the data
     query_influxdb_res = query_influxdb(query)
@@ -241,9 +281,9 @@ def run(event, context):
     forecast = prophet_forecast(df)
     print('---------- prophet forecast end ----------')
 
-    data = create_write_influxdb_data(forecast)
+    data = create_write_influxdb_data(forecast, 'pid', 'TMCHECKM', '1h')
 
-    write_influxdb(data)
+    write_influxdb(data, 'ras', 'pid')
 
     response = {
         'statusCode': 200,
