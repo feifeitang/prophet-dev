@@ -18,6 +18,7 @@ import datetime
 import logging
 import numpy as np
 import pandas as pd
+# from sklearn.model_selection import ParameterGrid
 from prophet import Prophet
 from prophet.diagnostics import cross_validation
 import influxdb_client
@@ -56,7 +57,7 @@ def delete_data():
 def create_query(measurement, tagKey, tagValue, interval):
     try:
         query = ' from(bucket:"{}")\
-        |> range(start: -10d)\
+        |> range(start: -12d)\
         |> filter(fn: (r) => r._measurement == "{}" and r.{} == "{}")\
         |> group(columns: ["{}"])\
         |> aggregateWindow(every: {}, fn: count)\
@@ -233,22 +234,8 @@ def write_influxdb(data, measurement, tagKey):
         print('write_influxdb error:', str(e))
 
 
-def run(event, context):
-    print('event:', event)
-    print('context:', context)
-
-    current_time = datetime.datetime.now().time()
-    name = context.function_name
-
-    body = {
-        'message': 'Your cron function ' + name + ' ran at ' + str(current_time),
-        'input': event
-    }
-
-    # delete future data before forecast again
-    delete_data()
-
-    query = create_query('ras', 'pid', 'ITMCHECKM', '1h')
+def main(measurement, tagKey, tagValue, interval):
+    query = create_query(measurement, tagKey, tagValue, interval)
 
     # load the data
     query_influxdb_res = query_influxdb(query)
@@ -280,9 +267,31 @@ def run(event, context):
     forecast = prophet_forecast(df)
     print('---------- prophet forecast end ----------')
 
-    data = create_write_influxdb_data(forecast, 'pid', 'ITMCHECKM', '1h')
+    data = create_write_influxdb_data(forecast, tagKey, tagValue, interval)
 
-    write_influxdb(data, 'ras', 'pid')
+    write_influxdb(data, measurement, tagKey)
+
+
+def run(event, context):
+    print('event:', event)
+    print('context:', context)
+
+    current_time = datetime.datetime.now().time()
+    name = context.function_name
+
+    body = {
+        'message': 'Your cron function ' + name + ' ran at ' + str(current_time),
+        'input': event
+    }
+
+    # delete future data before forecast again
+    delete_data()
+
+    main('ras', 'pid', 'ITMCHECKM', '1h')
+    print('--------------------------------------------------')
+    main('ras', 'pid', 'TMCHECKM', '1h')
+    print('--------------------------------------------------')
+    main('ras', 'client_country', 'US', '1h')
 
     response = {
         'statusCode': 200,
