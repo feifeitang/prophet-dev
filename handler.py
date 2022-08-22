@@ -18,7 +18,6 @@ import datetime
 import logging
 import numpy as np
 import pandas as pd
-# from sklearn.model_selection import ParameterGrid
 from prophet import Prophet
 from prophet.diagnostics import cross_validation
 import influxdb_client
@@ -106,40 +105,6 @@ def calculate_mape(y, y_pred):
 
 def prophet_forecast(df):
     try:
-        # # Tune changepoint
-        # params_grid = {
-        #     'n_changepoints': [20, 25, 30],  # default 25
-        #     'changepoint_range': [7, 8, 9],  # default 0.8
-        #     'changepoint_prior_scale': [0.5, 0.05],  # default 0.05
-        # }
-        # grid = ParameterGrid(params_grid)
-        # cnt = 0
-        # for p in grid:
-        #     cnt = cnt+1
-        # print('Total Possible Models', cnt)
-
-        # val = pd.DataFrame(columns = ['Acc', 'MAPE', 'Parameters'])
-
-        # for p in grid:
-        #     print(p)
-
-        #     m = Prophet(
-        #         n_changepoints = p['n_changepoints'],
-        #         changepoint_range = p['changepoint_range'] / 10,
-        #         changepoint_prior_scale = p['changepoint_prior_scale'],
-        #     )
-        #     m.fit(df)
-
-        #     future = m.make_future_dataframe(periods=72, freq="1h")
-        #     forecast = m.predict(future)
-        #     forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail()
-
-        #     df_cv = cross_validation(m, initial='7 days', period='1.5 days', horizon = '3 days')
-
-        #     mape = calculate_mape(df_cv['y'], df_cv['yhat'])
-        #     acc = 100-mape
-        #     val = val.append({'Acc':acc, 'MAPE':mape, 'Parameters':p}, ignore_index=True)
-
         # model fitting
         m = Prophet(interval_width=0.95)
         m.fit(df)
