@@ -53,14 +53,14 @@ def delete_data():
         print('delete_data error:', str(e))
 
 
-def create_query(measurement, tagKey, tagValue, interval):
+def create_query(startTime, measurement, tagKey, tagValue, interval):
     try:
         query = ' from(bucket:"{}")\
-        |> range(start: -12d)\
+        |> range(start: {})\
         |> filter(fn: (r) => r._measurement == "{}" and r.{} == "{}")\
         |> group(columns: ["{}"])\
         |> aggregateWindow(every: {}, fn: count)\
-        |> yield() '.format(BUCKET, measurement, tagKey, tagValue, tagKey, interval)
+        |> yield() '.format(BUCKET, startTime, measurement, tagKey, tagValue, tagKey, interval)
 
         return query
 
@@ -106,7 +106,7 @@ def calculate_mape(y, y_pred):
 def prophet_forecast(df):
     try:
         # model fitting
-        m = Prophet(interval_width=0.95)
+        m = Prophet(interval_width=0.99)
         m.fit(df)
         future = m.make_future_dataframe(periods=72, freq='1h')
         forecast = m.predict(future)
@@ -199,8 +199,8 @@ def write_influxdb(data, measurement, tagKey):
         print('write_influxdb error:', str(e))
 
 
-def main(measurement, tagKey, tagValue, interval):
-    query = create_query(measurement, tagKey, tagValue, interval)
+def main(startTime, measurement, tagKey, tagValue, interval):
+    query = create_query(startTime, measurement, tagKey, tagValue, interval)
 
     # load the data
     query_influxdb_res = query_influxdb(query)
@@ -252,11 +252,17 @@ def run(event, context):
     # delete future data before forecast again
     delete_data()
 
-    main('ras', 'pid', 'ITMCHECKM', '1h')
+    main('-13d', 'ras', 'pid', 'ITMCHECKM', '1h')
     print('--------------------------------------------------')
-    main('ras', 'pid', 'TMCHECKM', '1h')
+    main('-13d', 'ras', 'pid', 'TMCHECKM', '1h')
     print('--------------------------------------------------')
-    main('ras', 'client_country', 'US', '1h')
+    main('-13d', 'ras', 'client_country', 'US', '1h')
+    print('--------------------------------------------------')
+    main('-6d', 'extsourcing', 'arbiter', 'swift', '1h')
+    print('--------------------------------------------------')
+    main('-6d', 'extsourcing', 'pid', 'ITMCHECKM', '1h')
+    print('--------------------------------------------------')
+    main('-6d', 'extsourcing', 'pid', 'TMCHECKM', '1h')
 
     response = {
         'statusCode': 200,
