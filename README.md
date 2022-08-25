@@ -1,3 +1,5 @@
+![](https://i.imgur.com/mIBmY5a.png)
+
 <!--
 title: 'AWS Python Scheduled Cron example in Python'
 description: 'This is an example of creating a function that runs as a cron job using the serverless ''schedule'' event.'
