@@ -1,4 +1,4 @@
-![](https://i.imgur.com/mIBmY5a.png)
+![](https://i.imgur.com/LUDQxcY.png)
 
 <!--
 title: 'AWS Python Scheduled Cron example in Python'
