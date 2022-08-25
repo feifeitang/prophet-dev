@@ -18,6 +18,10 @@
 - invoke service: ```make sls-invoke```
 - deploy and invoke service: ```make sls-deploy-invoke```
 
+## Tips in Serverless
+- add ```zip``` requirement to deal with Lambda's size limitation while install large dependencies
+- add ```noDeploy``` requirement to omit specific packages from the deployment
+
 <!--
 title: 'AWS Python Scheduled Cron example in Python'
 description: 'This is an example of creating a function that runs as a cron job using the serverless ''schedule'' event.'
