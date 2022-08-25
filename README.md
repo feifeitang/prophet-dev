@@ -1,4 +1,22 @@
+# Metrics Anomaly Detection
+
+## Architecture
 ![](https://i.imgur.com/LUDQxcY.png)
+
+1. EventBridge triggers Lambda
+    - schedule rate could be edited in ```serverless.yml```
+2. Lambda deletes future data & query raw data
+    - Use ```delete_data``` function to delete future data
+    - Use ```create_query``` function to create query first, then use ```query_influxdb``` function to query raw data from InfluxDB
+3. Use ```prophet_forecast``` function to do forecast
+4. Use ```create_write_influxdb_data``` function to create data first, then use ```write_influxdb``` function to insert data to InfluxDB
+
+## Script to run
+- activate virtual environment: ```make venv-activate```
+- list dependencies in txt file: ```make freeze-reqs```
+- deploy service: ```make sls-deploy```
+- invoke service: ```make sls-invoke```
+- deploy and invoke service: ```make sls-deploy-invoke```
 
 <!--
 title: 'AWS Python Scheduled Cron example in Python'
