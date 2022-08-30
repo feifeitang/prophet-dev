@@ -49,8 +49,6 @@ def delete_data(measurement):
         predicate = '_measurement="{}-prophet-forecast"'.format(measurement)
         delete_api.delete(
             start, stop, predicate, bucket=BUCKET)
-        delete_api.delete(
-            start, stop, predicate, bucket=BUCKET)
 
     except Exception as e:
         print('delete_data error:', str(e))
