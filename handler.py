@@ -38,16 +38,19 @@ client = influxdb_client.InfluxDBClient(
 )
 
 
-def delete_data():
+def delete_data(measurement):
     try:
         delete_api = client.delete_api()
 
-        start = datetime.datetime.now()
+        start = datetime.datetime.now()+datetime.timedelta(-28)
         print('start time', start)
         stop = datetime.datetime.now()+datetime.timedelta(5)
         print('stop time', stop)
+        predicate = '_measurement="{}-prophet-forecast"'.format(measurement)
         delete_api.delete(
-            start, stop, '_measurement="ras-prophet-forecast"', bucket=BUCKET)
+            start, stop, predicate, bucket=BUCKET)
+        delete_api.delete(
+            start, stop, predicate, bucket=BUCKET)
 
     except Exception as e:
         print('delete_data error:', str(e))
@@ -249,20 +252,20 @@ def run(event, context):
         'input': event
     }
 
-    # delete future data before forecast again
-    delete_data()
+    delete_data('ras')
+    delete_data('extsourcing')
 
-    main('-13d', 'ras', 'pid', 'ITMCHECKM', '1h')
+    main('-19d', 'ras', 'pid', 'ITMCHECKM', '1h')
     print('--------------------------------------------------')
-    main('-13d', 'ras', 'pid', 'TMCHECKM', '1h')
+    main('-19d', 'ras', 'pid', 'TMCHECKM', '1h')
     print('--------------------------------------------------')
-    main('-13d', 'ras', 'client_country', 'US', '1h')
+    main('-19d', 'ras', 'client_country', 'US', '1h')
     print('--------------------------------------------------')
-    main('-6d', 'extsourcing', 'arbiter', 'swift', '1h')
+    main('-12d', 'extsourcing', 'arbiter', 'swift', '1h')
     print('--------------------------------------------------')
-    main('-6d', 'extsourcing', 'pid', 'ITMCHECKM', '1h')
+    main('-12d', 'extsourcing', 'pid', 'ITMCHECKM', '1h')
     print('--------------------------------------------------')
-    main('-6d', 'extsourcing', 'pid', 'TMCHECKM', '1h')
+    main('-12d', 'extsourcing', 'pid', 'TMCHECKM', '1h')
 
     response = {
         'statusCode': 200,
